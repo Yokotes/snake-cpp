@@ -4,7 +4,6 @@
 #include <tuple>
 #include <iterator>
 
-
 int ROWS, COLUMNS;
 
 class Snake {
