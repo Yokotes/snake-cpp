@@ -2,120 +2,162 @@
 #include <list>
 #include <vector>
 #include <tuple>
+#include <iterator>
 
-enum { UP, DOWN, LEFT, RIGHT };
 
-struct Cell {
-  int row = 0;
-  int column = 0;
+int ROWS, COLUMNS;
 
-  Cell(int row, int column): row(row), column(column) {};
+class Snake {
+  enum DIRECTION {UP, DOWN, LEFT, RIGHT};  
+  struct Segment {
+    int row;
+    int col;
+    Segment(int row, int col): row(row), col(col) {}
+  };
+
+  std::list<Segment> segments;
+  DIRECTION dir = LEFT;
+  bool isGrowing = false;
+  
+  void changeDir(int input);
+  
+  public:
+  Snake(int row, int col);
+  void move(int input);
+  void draw();
+  bool isOverlapping();
+  bool isOccupies(int row, int col);
+  const Segment& getHead();
+  void grow();
 };
 
-void changeDir(char &dir, int input) {
-  switch (input) {
-    case KEY_UP:
-      if (dir != DOWN) {
-        dir = UP;
-      }
-      break;
-    case KEY_DOWN:
-      if (dir != UP) {
-        dir = DOWN;
-      }
-      break;
-    case KEY_LEFT:
-      if (dir != RIGHT) {
-        dir = LEFT;
-      }
-      break;
-    case KEY_RIGHT:
-      if (dir != LEFT) {
-        dir = RIGHT;
-      }
-      break;
-  }
+Snake::Snake(int row, int col) {
+  segments = {
+    Segment{row, col},
+    Segment{row, col+1},
+    Segment{row, col+2}
+  };
 }
+void Snake::move(int input) {
+  Segment& head = segments.front();
+  int r = head.row;
+  int c = head.col;
 
-void moveSnake(std::list<Cell> &snake, int rows, int cols, char dir, Cell *&apple, bool &isOver) {
-  Cell& head = snake.front();
-  Cell& tail = snake.back();
-  
-  int head_row = head.row;
-  int head_col = head.column;
+  changeDir(input);
 
-  switch(dir) {
+  // Changing dir and setting new head position
+  switch (dir) {
     case UP:
-      head_row--;
+      r--;
 
-      if (head_row < 0) {
-        head_row = rows - 1;
+      if (r < 0) {
+        r = ROWS - 1;
       }
       break;
     case DOWN:
-      head_row++;
+      r++;
 
-      if (head_row == rows) {
-        head_row = 0;
+      if (r == ROWS) {
+        r = 0;
       }
       break;
     case LEFT:
-      head_col--;
+      c--;
 
-      if (head_col < 0) {
-        head_col = cols - 1;
+      if (c < 0) {
+        c = COLUMNS - 1;
       }
       break;
     case RIGHT:
-      head_col++;
+      c++;
 
-      if (head_col == cols) {
-        head_col = 0;
+      if (c == COLUMNS) {
+        c = 0;
       }
       break;
   }
-
-  
-  if (mvinch(head_row, head_col) == '@') {
-    isOver = true;
+    
+  segments.push_front(Segment{r, c});
+  if (isGrowing) {
+    isGrowing = false;
     return;
   }
-  
-  snake.push_front(Cell{head_row, head_col});
-
-  if (apple != nullptr && head_row == apple->row && head_col == apple->column) {
-    mvdelch(apple->row, apple->column);
-    apple = nullptr;
-    return;
-  }
-  
-  snake.pop_back();
+  segments.pop_back();
 }
-
-void drawSnake(std::list<Cell> &snake) {
-  for (std::list<Cell>::iterator it = snake.begin(); it != snake.end(); it++) {
-    mvaddch(it->row, it->column, '@');
+void Snake::draw() {
+  for (std::list<Segment>::iterator it = segments.begin(); it != segments.end(); it++) {
+    mvaddch(it->row, it->col, '@');
   }
 }
+void Snake::changeDir(int input) {
+  switch (input) {
+      case KEY_UP:
+        if (dir != DOWN) dir = UP;
+        break;
+      case KEY_DOWN:
+        if (dir != UP) dir = DOWN;
+        break;
+      case KEY_LEFT:
+        if (dir != RIGHT) dir = LEFT;
+        break;
+      case KEY_RIGHT:
+        if (dir != LEFT) dir = RIGHT;
+        break;
+    }
+}
+bool Snake::isOverlapping() {
+  Segment& head = segments.front();
+  for (std::list<Segment>::iterator it = std::next(segments.begin()); it != segments.end(); it++) {
+    if (head.row == it->row && head.col == it->col) {
+      return true;
+    }
+  }
+  return false;
+}
+bool Snake::isOccupies(int row, int col) {
+  for (auto &s: segments) {
+    if (s.row == row && s.col == col) return true;
+  }
+  return false;
+}
+const Snake::Segment& Snake::getHead() {
+  return segments.front();
+}
+void Snake::grow() {
+  isGrowing = true;
+}
 
-std::tuple<int, int> getAppleCell(int rows, int cols) {
-  std::vector<Cell> freeCells = {};
+struct Apple {
+  int row;
+  int col;
 
-  for (int i = 0; i < rows; i++) {
-    for (int j = 0; j < cols; j++) {
-      if (mvinch(i, j) != '@') {
-        freeCells.push_back(Cell{i, j});
-      }
+  Apple(Snake& snake);
+  void spawn(Snake& snake);
+  void draw();
+};
+
+Apple::Apple(Snake& snake) {
+  spawn(snake);
+}
+void Apple::spawn(Snake& snake) {
+  std::vector<std::tuple<int, int>> freeCells;
+
+  // Getting ALL free cells
+  for (int i = 0; i < ROWS; i++) {
+    for (int j = 0; j < COLUMNS; j++) {
+      if (!snake.isOccupies(i, j)) freeCells.push_back(std::tuple<int, int>{i, j});
     }
   }
 
+  // Choosing one and setting row and col
   int index = rand() % freeCells.size();
-  Cell &cell = freeCells.at(index);
-  
-  return std::tuple<int, int>{cell.row, cell.column};
+  std::tie<int, int>(row, col) = freeCells.at(index);
+}
+void Apple::draw() {
+  mvaddch(row, col, 'O');
 }
 
-int main() {
+void initCurses() {
   initscr();
   cbreak();
   noecho();
@@ -123,53 +165,49 @@ int main() {
   curs_set(0);
 
   timeout(250);
+  getmaxyx(stdscr, ROWS, COLUMNS);
+}
 
-  int rows, columns;
-  char dir = LEFT;
-  bool isOver = false;
-  Cell *apple = nullptr;
-
-  getmaxyx(stdscr, rows, columns);
-
-  // Spawn snake
-  std::list<Cell> snake = {
-    Cell{rows/2, columns/2},
-    Cell{rows/2, columns/2 + 1},
-    Cell{rows/2, columns/2 + 2}
-  };
-
-  drawSnake(snake);
-
-  // Game cycle
-  while(!isOver) {
-    // Spawn apple
-    if (apple == nullptr) {
-      int r, c;
-      std::tie(r, c) = getAppleCell(rows, columns);
-      
-      apple = new Cell{r, c};
-    }
-
-    if (apple != nullptr) {
-      mvaddch(apple->row, apple->column, '0');
-    }
-
-    // Snake moving
-    int input = getch();
-    changeDir(dir, input);
-
-    
-    moveSnake(snake, rows, columns, dir, apple, isOver);
-    clear();
-    drawSnake(snake);
-
-
-    refresh();
+void checkCollision(Snake& snake, Apple& apple, bool& running) {
+  // Checking if snake is bitting its body
+  if (snake.isOverlapping()) {
+    running = false;
+    return;
   }
 
-  printw("OVER!!!");
-  refresh();
-  getch();
+  // Checking snake and apple collision
+  auto snakeHead = snake.getHead();
+  if (apple.row == snakeHead.row && apple.col == snakeHead.col) {
+    snake.grow();
+    apple.spawn(snake);
+  }
+}
+
+int main() {
+  initCurses();
+
+  bool running = true;
+  Snake snake{ROWS/2, COLUMNS/2};
+  Apple apple{snake};
+
+  // Game cycle
+  while(running) {
+    // Checking collisions and reacting
+    checkCollision(snake, apple, running);
+    if (!running) break;
+
+    // Getting user input
+    int input = getch();
+
+    // Moving snake
+    snake.move(input);
+
+    // Drawing things on screen
+    clear();
+    snake.draw();
+    apple.draw();
+    refresh();
+  }
 
   endwin();
 }
